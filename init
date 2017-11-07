@@ -1,0 +1,3 @@
+source ~/.profile
+workon cv
+cd Desktop/D2U-master
