@@ -6,7 +6,7 @@ fb = firebase.FirebaseApplication('https://d2u2-68242.firebaseio.com/',None)
 def readData():
     curQ = fb.get('/Queue/Current',None)
     inQ = fb.get('/Queue/InQueue',None)
-    print(curQ)
+    #print(curQ)
     return int(curQ),int(inQ)
 
 def updateQueue(curQ,inQ):

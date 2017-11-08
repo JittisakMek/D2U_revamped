@@ -13,14 +13,11 @@ M1_B = 33
 M1_PWMPIN = 29
 M1_DUTY = 100
 
-
 #M2 = left motor
 M2_A = 35
 M2_B = 37
 M2_PWMPIN = 40
 M2_DUTY = 100
-
-
 
 #SERVO and LED pin
 SERVO_KNOCK_PIN = 22
@@ -30,10 +27,12 @@ SERVO_KNOCK_DUTY = 50
 SERVO_CAM_PIN = 5
 SERVO_CAM_DUTY = 50
 
+#SWITCH
+SW = 36
 
 #initialised PINS
 GPIO.setmode(GPIO.BOARD)
-#motor INIT
+#MOTOR INIT
 GPIO.setup(M1_A,GPIO.OUT)
 GPIO.setup(M1_B,GPIO.OUT)
 GPIO.setup(M1_PWMPIN,GPIO.OUT)
@@ -42,10 +41,14 @@ GPIO.setup(M2_B,GPIO.OUT)
 GPIO.setup(M2_PWMPIN,GPIO.OUT)
 GPIO.setup(SERVO_KNOCK_PIN,GPIO.OUT)
 GPIO.setup(SERVO_CAM_PIN,GPIO.OUT)
+#PWM INIT
 M1_P = GPIO.PWM(M1_PWMPIN,M1_DUTY)
 M2_P = GPIO.PWM(M2_PWMPIN,M2_DUTY)
 SERVO_KNOCK_P = GPIO.PWM(SERVO_KNOCK_PIN,SERVO_KNOCK_DUTY)
 SERVO_CAM_P = GPIO.PWM(SERVO_CAM_PIN,SERVO_CAM_DUTY)
+
+#SW INIT
+GPIO.setup(SW,GPIO.IN,pull_up_down=GPIO.PUD_DOWN)
 
 # set M1
 def setMotorPinM1(A,B):
@@ -105,10 +108,7 @@ def setDelayR(delay):
 def setDelayL(delay):
     DT_LEFT = delay
 
-
-
-
-# startsss
+#START
 
 def startM1():
     M1_P.start(0)
@@ -122,7 +122,7 @@ def startKNOCK():
 def startCAM():
     SERVO_CAM_P.start(0)
 
-#stops
+#STOP
 
 def stopM1():
     M1_P.stop()

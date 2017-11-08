@@ -3,7 +3,6 @@ import motor
 import sys
 import time
 import Sonar
-import delivery
 import numpy as np
 import myFirebase
 from multiprocessing import Process, Queue
@@ -18,16 +17,11 @@ ThreshForwardLeft = 50
 ThreshFront = 50
 
 cur = 0
-isAscending = False
-#shotest path
-#justwalk
-#finnish
-
+flag = False # signal Video to start
 #Things to update
-#Finish() function have to use ultrasonic so function in control()?
-#When reach corner detect after crossing detect destination or turn left or right
+#Finish() condition for destination == corner
+#Complete the condition decision for corner
 #Function cross -> runNoWall
-#Separate function in VideoFilter
 
 def ReadQueue(lock1,lock2,q):
         lock1.acquire()
@@ -37,31 +31,53 @@ def ReadQueue(lock1,lock2,q):
         lock2.release()
         time.sleep(0.01)
 
-def runWall(left, right, front):
-    if front>40:
-        if right<25:
-            if right < 5:
-                motor.robot_leftforward(50)
-                
-            else:
-                motor.robot_leftforward(30)
-                
-        elif left<25:
-            if left < 5:
-                motor.robot_rightforward(50)
-            else:
-                motor.robot_rightforward(30)
-                
-        else:
-            motor.robot_forward()
-    else:
-        motor.robot_stop()
-        
 def PRINT(q):
     while True:
         if not q.empty():
             print(q.get())
 
+def runR(left, right, front):
+    if front>40:
+            if right<25:
+                if right < 5:
+                    motor.robot_leftforward(50)
+                    
+                else:
+                    motor.robot_leftforward(30)
+                    
+            elif right>30 or left<30:
+                if right < 40:
+                    motor.robot_rightforward(20)
+                else:
+                    motor.robot_rightforward(30)
+
+            else:
+                motor.robot_forward()
+        
+    else:
+        motor.robot_stop()
+        
+def runL(left, right, front):
+        if front>40:
+                if left<25:
+                    if left < 5:
+                        motor.robot_rightforward(50)
+                        
+                    else:
+                        motor.robot_rightforward(30)
+                        
+                elif left>30 or right<30:
+                    if left < 40:
+                        motor.robot_leftforward(20)
+                    else:
+                        motor.robot_leftforward(30)
+                else:
+                    motor.robot_forward()
+                    #print('robot_forward')
+        else:
+                motor.robot_stop()
+                #print('robot_stop')
+                
 def cornerCheck(cur):
     if cur == 1 or cur == 7 or cur == 8 or cur == 14:
         corner = True
@@ -71,21 +87,17 @@ def cornerCheck(cur):
 
     return corner
 
-def nodeAscendingCheck(source, destination)  :
-    global isAscending
+def nodeAscendingCheck(source, destination):
     if destination > source:
         ascending = True
     else:
         ascending = False
         
-    isAscending = ascending
+    return ascending
 
-def decision(source, destination):
-    #0=no turn
-    #1=turnLeft
-    #2=turnRight
+def decision(isAscending):
+#TURN LEFT or TURN RIGHT or FORWARD
     global cur
-    global isAscending
     
     if cur == 1 and not isAscending:
         #robot cross
@@ -107,14 +119,41 @@ def decision(source, destination):
             motor.turn_right()
             motor.camRight() #NO Descending
 
-def delivering():
-        
-
 def finish():
+    #No need for ultraInit() and motor.QuickStart() again
+    On = Sonar.SonarUse()
+    On.Distance = 10
+    SF = threading.Thread(target = Sonar.SoNarFront,args = (On.F,On.b,On.On))
+    
     if isAscending():
-            motor.turn_left()
-            
-def Control(q,qprint,src,dest):
+        motor.turn_left()
+    else:
+        motor.turn_right()
+
+    SF.start()
+    On.b.wait()
+    while True:
+        On.b.wait()
+        if On.F.Distance>36:
+                motor.robot_forward()
+        elif On.F.Distance<=36:
+                break
+        On.b.wait()
+    #Turn OFF Ultrasonic  
+    On.b.wait()
+    On.On.Distance = 0;
+    On.b.wait()
+    #KNOCK
+    motor.robot_stop()
+    motor.knock()
+    
+    print('***PUSH***')
+    while GPIO.input(motor.SW) != True:
+        pass
+    turn_back()
+    robot_stop()
+               
+def Control(q,src,dest):
     global cur
     Sonar.ultraInit()
     On = Sonar.SoNarUse()
@@ -128,17 +167,17 @@ def Control(q,qprint,src,dest):
     SF.start()
 
     motor.QuickStart()
-    nodeAscendingCheck(src,dest)
-    decision(src,dest)
-    
+    isAscending = nodeAscendingCheck(src,dest)
+    decision(isAscending) #decision check before loop because turning does not happen all the time except for corners
+    flag = True;
     while q.empty():
     
         On.b.wait()
         if cornerCheck(cur):
             decision(src,dest)
-            runWall(On.L.Distance, On.R.Distance, On.F.Distance)
+            runR(On.L.Distance, On.R.Distance, On.F.Distance)
         else:
-            runWall(On.L.Distance, On.R.Distance, On.F.Distance)
+            runR(On.L.Distance, On.R.Distance, On.F.Distance)
         On.b.wait()
 
     On.b.wait()
@@ -146,59 +185,70 @@ def Control(q,qprint,src,dest):
     On.b.wait()
     
 def auto():
-    #input destination sorc
+    global cur
+    
     [curQ, inQ] = myFirebase.readData()
     [src, dest] = myFirebase.getScrDest(myFirebase.getTaskDetail(curQ))
-    print('Source = ',src,'\n','Destination = ',dest)
-    global cur
-    global isAscending
-    cur = src
+    src = int(src)
+    dest = int(dest)
     
-    qprint = Queue()
-    qcontrol = Queue()
+    while(src<1 or src>14 or dest<1 or dest>14):
+            print('Retrieving source and destination.....')
+            time.sleep(0.3)
+    print('Source = ',src,'\n','Destination = ',dest)
+
+    cur = src
+    isAscending = nodeAscendingCheck(src,dest)
+    
     qvideo = Queue()
-    p_vid = Process(target = VideoFilter.videoFilter, args = (3,qvideo))
-    p_control = Process(target = Control, args = (qcontrol,qprint, src, dest))
+    qcontrol = Queue()
+    qprint = Queue()
+    p_vid = Process(target = VideoFilter.videoFilter, args = (qvideo))
+    p_control = Process(target = Control, args = (qcontrol, src, dest))
     p_print = Process(target = PRINT, args = (qprint,))
-    p_print.start()
-    p_vid.start()
     p_control.start()
+    while flag == false:
+        print('Waiting for VideoSignal...')
+        time.sleep(0.2)
+        pass
+    p_vid.start()
+    p_print.start()
    
     while(cur!=dest):
-        qprint.put(cur)
-        time.sleep(0.1)
-        #CURRENT NODE UPDATE
-        if not(qvideo.empty()):
-            
-            if isAscending:
-                cur = cur+(ReadQueue(lock1,lock2,qvideo))  
-            else:
-                cur = cur-(ReadQueue(lock1,lock2,qvideo))
-                
-            if cur == 15:
-                cur = 1
-            elif cur == 0:
-                cur = 14
-        else:
-            pass
-        
-    qcontrol.put(1)
-        
-    #start thread video filter
-    #process or thread Control(q)
-    #while(not destination
-    #if get node node+++ where is the robot
-    # if destination q.put(1)
-    #join with video process
-    #finish()
+            qprint.put(cur)
+            time.sleep(0.1)
 
+            if qvideo.empty() != true:
+            #CURRENT NODE UPDATE
+                if isAscending:
+                    cur = cur+qvideo.get() 
+                else:
+                    cur = cur-qvideo.get()
+                    
+                if cur == 15:
+                    cur = 1
+                elif cur == 0:
+                    cur = 14
+    qvideo.put(0)
+    qcontrol.put(0)
+    finish()
+    p_vid.join()
+    p_control.join()
+    p_print.join()
     
 def main():
-    try:
-        auto()
-    except KeyboardInterrupt:
-        GPIO.cleanup()
+   try:
+       while True:
+         
+          auto()
+          #For Debug only
+          ans = input('Continue [C] | Quit[Q]: ')
+          if ans.lower() == 'q':
+             break
+            
+   except KeyboardInterrupt:
+      motor.QuickStop()
+      GPIO.cleanup()
     
-
 if __name__ == "__main__":
     main()
