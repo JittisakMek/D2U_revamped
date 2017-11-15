@@ -9,6 +9,9 @@ from multiprocessing import Process, Queue
 from threading import Barrier
 import threading
 import VideoFilter
+#UPDATE REQUIREMENT
+#cam.stratight
+#cross corner not destination
 ################################Using the one in run###########
 ThreshTurnLeft = 100    #DO NOT ABRUPTLY TURN MY ROBOT !!!
 ThreshTurnRight = 100   #DO NOT ABRUPTLY TURN MY ROBOT !!!
@@ -20,11 +23,6 @@ cur = 0
 videoFlag = False # signal Video to start
 cornerFlag = False #run cornerDecision only once
 runNoWallFlag = False
-
-#Things to update
-#Finish() condition for destination == corner
-#Complete the condition decision for corner
-#Function cross -> runNoWall
 
 def ReadQueue(lock1,lock2,q):
         lock1.acquire()
@@ -138,34 +136,36 @@ def cornerCheck(cur):
     return corner
 
 def nodeAscendingCheck(source, destination):
-
-    if destination > source:
-        ascending = True
+    nodeDistance = abs(destination-source)
+    if nodeDistance <= 7:
+        if destination > source:
+            ascending = True
+        else:
+            ascending = False
     else:
-        ascending = False
-        
+        if destination > source:
+            ascending = False
+        else:
+            ascending = True
+            
     return ascending
 
 def startDecision(isAscending):
     global cur
     global cornerFlag
 
-    if cur == 1 and isAscending:
+    if cur == 1 and not isAscending:
         #Cross front
         motor.camStraight()
-        cornerFlag = True
-    elif cur == 14 and not isAscending:
+    elif cur == 14 and isAscending:
         #Cross front
         motor.camStraight()
-        cornerFlag = True
     elif cur == 7 and isAscending:
         #Cross back
         motor.camStraight()
-        cornerFlag = True
     elif cur == 8 and not isAscending:
         #Cross back
         motor.camStraight()
-        cornerFlag = True
     else:
         if isAscending:
             motor.turn_left()
@@ -173,7 +173,7 @@ def startDecision(isAscending):
         else:
             motor.turn_right()
             motor.camRight() #NO Descending
-            
+
 def cornerDecision(isAscending):
 #TURN LEFT or TURN RIGHT or FORWARD
     global cur
@@ -206,7 +206,6 @@ def runNoWallSet():
     elif cur == 14 and runNoWallFlag == False:
         node = 14
         runNoWallFlag = True
-    else:
         
     
 def Control(q,src,dest):
@@ -219,7 +218,6 @@ def Control(q,src,dest):
     SR = threading.Thread(target = Sonar.SoNarRight,args = (On.R,On.b,On.On))
     SL = threading.Thread(target = Sonar.SoNarLeft,args = (On.L,On.b,On.On))
     SF = threading.Thread(target = Sonar.SoNarFront,args = (On.F,On.b,On.On))
-
     SR.start()
     SL.start()
     SF.start()
@@ -232,18 +230,24 @@ def Control(q,src,dest):
     while q.empty():
     
         On.b.wait()
-        if cornerCheck(cur):
+        #src != cur prevent cornerDecision colliding with startDecision
+        if cornerCheck(cur) and src != cur:
+            #to prevent doing cornerDecision many times in one spot
             if cornerFlag == False:
                 cornerDecision(isAscending)
                 cornerFlag = True
             elif cornerCheck(dest):
                 if cur == 7 or cur == 14:
-                    runNoWallR()
+                    runNoWallR(On.L.Distance, On.R.Distance, On.F.Distance))
                 elif cur == 1 or cur == 8:
-                    runNoWallL()
+                    runNoWallL(On.L.Distance, On.R.Distance, On.F.Distance))
             else:
+                if cur == 8:
+                    if On.F.Distance > 36:
+                        
                 
-                
+                    
+            
         else:
             runR(On.L.Distance, On.R.Distance, On.F.Distance)
         On.b.wait()
@@ -298,18 +302,18 @@ def auto():
 
     cur = src
     isAscending = nodeAscendingCheck(src,dest)
-    
+
+    qauto = Queue()
     qvideo = Queue()
     qcontrol = Queue()
     qprint = Queue()
-    p_vid = Process(target = VideoFilter.videoFilter, args = (qvideo))
+    p_vid = Process(target = VideoFilter.videoFilter, args = (qvideo,qauto))
     p_control = Process(target = Control, args = (qcontrol, src, dest))
     p_print = Process(target = PRINT, args = (qprint,))
     p_control.start()
     while videoFlag == false:
         print('Waiting for VideoSignal...')
         time.sleep(0.2)
-        pass
     p_vid.start()
     p_print.start()
    
@@ -328,7 +332,7 @@ def auto():
                 cur = 1
             elif cur == 0:
                 cur = 14
-    qvideo.put(0)
+    qauto.put(0)
     qcontrol.put(0)
     p_vid.join()
     p_control.join()
@@ -374,7 +378,6 @@ def finish():
 def main():
    try:
        while True:
-         
           auto()
           #For Debug only
           ans = input('Continue [C] | Quit[Q]: ')

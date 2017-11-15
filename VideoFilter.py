@@ -30,7 +30,7 @@ def outputText(pixel, nodeCount, i):
                 myFile.write(count)
                 myFile.write(myOut)
                                 
-def videoFilter(qvideo):
+def videoFilter(qvideo,qauto):
         print("starting Video....")
         i = 0 #For iteration in text Output
         flag = False #Ensures that one door is not counted twice
@@ -68,19 +68,19 @@ def videoFilter(qvideo):
                         
                         #DoorCount
                         if flag2 == False and pixel<door_lower:
-                                flag2 = True
+                            flag2 = True
                                 
                         if flag == False and flag2 == True and pixel>=door_upper:
-                                print('Node Detected')
-                                qvideo.put(1)
-                                flag = True
+                            print('Node Detected')
+                            qvideo.put(1)
+                            flag = True
                                 
                         elif flag == True and pixel<door_lower: #distance b/w two rooms very close so need door_lower
-                                flag = False
+                            flag = False
 
-                        if qvideo.get() == 0:
-                                print('Exiting Video....')
-                                break
+                        if qauto.empty() == False:
+                            print('Exiting Video....')
+                            break
 
                         i += 1
                         outputText(pixel, nodeCount, i)
